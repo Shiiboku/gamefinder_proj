@@ -138,6 +138,13 @@ def upgrade() -> None:
     op.create_index('idx_user_game_status_user_status', 'user_game_status', ['user_id', 'status'], unique=False)
     op.create_index(op.f('ix_user_game_status_id'), 'user_game_status', ['id'], unique=False)
     op.execute("""
+         ALTER TABLE games ADD COLUMN search_vector tsvector
+            GENERATED ALWAYS AS (
+                setweight(to_tsvector('russian', coalesce(title, '') || ' ' || coalesce(description, '')), 'A') ||
+                setweight(to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, '')), 'B')
+            ) STORED;
+        """)
+    op.execute("""
     CREATE OR REPLACE FUNCTION update_game_avg_rating()
     RETURNS TRIGGER AS $$
     BEGIN
@@ -159,6 +166,9 @@ def upgrade() -> None:
     AFTER INSERT OR DELETE OR UPDATE ON rating
     FOR EACH ROW EXECUTE FUNCTION update_game_avg_rating();
     """)
+
+
+
     # ### end Alembic commands ###
 
 
@@ -169,6 +179,11 @@ def downgrade() -> None:
     op.drop_index('idx_user_game_status_user_status', table_name='user_game_status')
     op.drop_index('idx_user_game_status_status', table_name='user_game_status')
     op.drop_index('idx_user_game_status_game_status', table_name='user_game_status')
+    # Удаляем триггер и функцию (если они существуют)
+    op.execute("DROP TRIGGER IF EXISTS trigger_update_avg_rating ON rating;")
+    op.execute("DROP FUNCTION IF EXISTS update_game_avg_rating();")
+    # Удаляем колонку search_vector из таблицы games (если она есть)
+    op.execute("ALTER TABLE games DROP COLUMN IF EXISTS search_vector;")
     op.drop_table('user_game_status')
     op.drop_index(op.f('ix_rating_id'), table_name='rating')
     op.drop_index('idx_rating_user_score', table_name='rating')
@@ -195,4 +210,4 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_developers_id'), table_name='developers')
     op.drop_index('idx_developers_title', table_name='developers')
     op.drop_table('developers')
-    # ### end Alembic commands ###
+

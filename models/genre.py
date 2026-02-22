@@ -9,9 +9,8 @@ class Genre(Base):
     name = Column(String(50), unique=True, nullable=False)
     description = Column(Text, nullable=True)
 
-    games = relationship("GameGenre", back_populates="genre")  # через ассоциацию
-    users = relationship("User", backref="fav_genre")  # те, у кого этот жанр избранный r
-
+    users_with_fav_genre = relationship("User",back_populates="fav_genre")
+    game_associations = relationship("GameGenre", back_populates="genre")
     __table_args__ = (
         CheckConstraint("length(name) >= 2", name="check_genres_name_len"),
     )

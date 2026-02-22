@@ -14,11 +14,12 @@ class Game(Base):
     avg_rating = Column(Numeric(4,2),default=0)
     steam_id = Column(Integer, unique=True, nullable=True)
 
-    developers = relationship("Developer", back_populates="games")
+    developer = relationship("Developer", back_populates="games")
     ratings = relationship("Rating", back_populates="game", cascade="all, delete-orphan")
-    user_stasuses = relationship("UserGameStasus", back_populates="game",cascade="all, delete-orphan")
-    genre_associations = relationship("GameGenre", back_populates="game", cascade="all, delete-orphan")
+    user_statuses = relationship("UserGameStatus", back_populates="game",cascade="all, delete-orphan")
     platform_associations = relationship("GamePlatform", back_populates="game", cascade="all, delete-orphan")
+    genre_associations = relationship("GameGenre", back_populates="game", cascade="all, delete-orphan")
+
 
     __table_args__ = (
         CheckConstraint("length(title) >= 2", name="check_title_len"),

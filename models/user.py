@@ -15,7 +15,7 @@ class User(Base):
     last_login = Column(DateTime(timezone=True), nullable=True)
     fav_genre_id = Column(Integer, ForeignKey("genres.id", ondelete="SET NULL"), nullable=True)
 
-    fav_genre = relationship("Genre", foreign_keys=[fav_genre_id])
+    fav_genre = relationship("Genre", foreign_keys=[fav_genre_id], back_populates="users_with_fav_genre")
     ratings = relationship("Rating", back_populates="user", cascade="all, delete-orphan")
     game_statuses = relationship("UserGameStatus", back_populates="user", cascade="all, delete-orphan")
 

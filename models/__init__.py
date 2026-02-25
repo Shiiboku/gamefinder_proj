@@ -7,3 +7,4 @@ from .rating import Rating
 from .user_game_status import UserGameStatus
 from .game_genre import GameGenre
 from .game_platform import GamePlatform
+from .game_details import GameDetails

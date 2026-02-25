@@ -10,16 +10,8 @@ from pathlib import Path
 # Добавляем корень проекта в путь поиска модулей
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from db import Base
-from models import User
-from models import Developer
-from models import Game
-from models import UserGameStatus
-from models import Rating
-from models import Platform
-from models import Genre
-from models import GameGenre
-from models import GamePlatform
+from db import Base, database
+import models
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

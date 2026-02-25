@@ -1,6 +1,4 @@
 from sqlalchemy import Column, Integer, String, Date, Boolean, Numeric, ForeignKey, CheckConstraint, Index
-# Добавляем JSONB для PostgreSQL
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from db import Base
 
@@ -8,24 +6,26 @@ from db import Base
 class Game(Base):
     __tablename__ = "games"
 
+    # Легкие поля для списков
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(100), unique=True, nullable=False)
-    description = Column(JSONB, nullable=True)
+    title = Column(String(100), nullable=False)
     release_date = Column(Date, server_default='CURRENT_DATE', nullable=True)
     is_available = Column(Boolean, default=True)
     dev_game = Column(Integer, ForeignKey("developers.id", ondelete="RESTRICT"), nullable=True)
     avg_rating = Column(Numeric(4, 2), default=0)
-    cover_url = Column(String(255), nullable=True)  # Главная обложка (PNG/JPG)
-    trailer_url = Column(String(255), nullable=True)  # Ссылка на YouTube/MP4
-    hltb_main = Column(Numeric(5, 1), nullable=True)  # Только сюжет
-    hltb_completionist = Column(Numeric(5, 1), nullable=True)  # На 100%
-    # Системные требования
-    sys_req_min = Column(JSONB, nullable=True)
-    sys_req_rec = Column(JSONB, nullable=True)
+    cover_url = Column(String(255), nullable=True)
+    hltb_main = Column(Numeric(5, 1), nullable=True)
+    hltb_completionist = Column(Numeric(5, 1), nullable=True)
+
     # Интеграции
     steam_app_id = Column(Integer, unique=True, nullable=True)
-    igdb_id = Column(Integer, unique=True, nullable=True)  # ID из базы IGDB
+    igdb_id = Column(Integer, unique=True, nullable=True)
 
+    # --- СВЯЗИ ---
+    # Новая связь One-to-One с деталями
+    details = relationship("GameDetails", back_populates="game", uselist=False, cascade="all, delete-orphan")
+
+    # Старые связи оставляем без изменений
     developer = relationship("Developer", back_populates="games")
     ratings = relationship("Rating", back_populates="game", cascade="all, delete-orphan")
     user_statuses = relationship("UserGameStatus", back_populates="game", cascade="all, delete-orphan")
@@ -38,5 +38,5 @@ class Game(Base):
         Index("idx_games_dev_game", "dev_game"),
         Index("idx_games_release_date", "release_date"),
         Index("idx_games_steam_app_id", "steam_app_id"),
-        Index("idx_games_igdb_id", "igdb_id"),  # Индекс для быстрого поиска при обновлении парсером
+        Index("idx_games_igdb_id", "igdb_id"),
     )

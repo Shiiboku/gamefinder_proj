@@ -30,7 +30,7 @@ def get_user_games(username: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
     # 2. Передаем его ID в нашу новую функцию
-    statuses = crud.get_user_games_statuses(db, user_id=user.id)
+    statuses = crud.get_user_game_statuses(db, user_id=user.id)
 
     return statuses
 

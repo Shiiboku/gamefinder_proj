@@ -15,6 +15,7 @@ GameFinder is a scalable, high-performance REST API designed to power a modern v
 * **Rich Game Metadata:** Full support for multilingual descriptions (via PostgreSQL `JSONB`), HowLongToBeat (HLTB) playtime stats, system requirements, cover images, and trailers.
 * **High-Performance DB Architecture:** Optimized PostgreSQL schema utilizing SQLAlchemy 2.0 `joinedload` to eliminate N+1 query problems. 
 * **Data Aggregation Ready:** Designed to work with background parsers fetching data from the IGDB API and Steam.
+* **Smart Background Import: Fault-tolerant background workers using FastAPI BackgroundTasks for parsing thousands of games from IGDB with automatic pagination, regex-based Steam ID matching, and a global kill-switch.
 
 ## 🚀 Roadmap / Upcoming Killer Features
 

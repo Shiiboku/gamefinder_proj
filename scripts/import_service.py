@@ -3,7 +3,7 @@ import re
 import time
 import logging
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from models.game import Game
 from models.game_details import GameDetails
@@ -11,7 +11,6 @@ from models.developers import Developer
 from models.genre import Genre
 from models.game_genre import GameGenre
 
-# --- ГРАМОТНАЯ НАСТРОЙКА ЛОГГЕРА ---
 log_dir = "logs"
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
@@ -19,20 +18,16 @@ if not os.path.exists(log_dir):
 current_date = datetime.now().strftime("%Y-%m-%d")
 log_filename = os.path.join(log_dir, f"import_{current_date}.log")
 
-# Создаем свой логгер, чтобы он не смешивался с SQLAlchemy
 logger = logging.getLogger("game_import")
 logger.setLevel(logging.INFO)
 
-# Очищаем старые обработчики, если они есть (чтобы не было дублей)
 if logger.hasHandlers():
     logger.handlers.clear()
 
-# Настраиваем запись в файл
 file_handler = logging.FileHandler(log_filename, encoding='utf-8')
 file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(file_handler)
 
-# Добавляем разделитель в начале каждой сессии, чтобы сразу видеть новые данные
 logger.info("="*50)
 logger.info(f"НОВАЯ СЕССИЯ ИМПОРТА: {datetime.now().strftime('%H:%M:%S')}")
 logger.info("="*50)
@@ -63,7 +58,6 @@ class GameIntegrationService:
 
     def get_steam_app_id(self, game_name: str) -> int | None:
         """Запасной поиск через Steam API"""
-
         def _search(term):
             url = "https://store.steampowered.com/api/storesearch/"
             params = {"term": term, "l": "english", "cc": "US"}
@@ -91,7 +85,6 @@ class GameIntegrationService:
         steam_id = None  # Гарантируем наличие переменной
 
         try:
-            # Логика разработчика
             companies = data.get("involved_companies", [])
             dev_id = None
             if companies:
@@ -115,7 +108,7 @@ class GameIntegrationService:
 
                 release_date_obj = None
                 if "first_release_date" in data:
-                    release_date_obj = datetime.fromtimestamp(data["first_release_date"]).date()
+                    release_date_obj = datetime.fromtimestamp(data["first_release_date"], tz=timezone.utc)#UTC, чтобы время везде было одинаковым
 
                 game = Game(
                     title=game_title,

@@ -9,7 +9,8 @@ class UserGameStatus(Base):
     id = Column(Integer, primary_key=True, index=True)
     game_id = Column(Integer, ForeignKey("games.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    status = Column(String(30), nullable=False)
+    status = Column(String(30), nullable=True)
+    score = Column(Integer, nullable=True)
     updated_at = Column(DateTime(timezone=True), server_default='NOW()', onupdate=func.now())
 
     user = relationship("User", back_populates="game_statuses")

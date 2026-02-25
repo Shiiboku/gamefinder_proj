@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, Boolean, Numeric, ForeignKey, CheckConstraint, Index
+from sqlalchemy import Column, Integer, String, Date, Boolean, Numeric, ForeignKey, CheckConstraint, Index, DateTime
 from sqlalchemy.orm import relationship
 from db import Base
 
@@ -9,7 +9,7 @@ class Game(Base):
     # Легкие поля для списков
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(100), nullable=False)
-    release_date = Column(Date, server_default='CURRENT_DATE', nullable=True)
+    release_date = Column(DateTime(timezone=True), nullable=True)
     is_available = Column(Boolean, default=True)
     dev_game = Column(Integer, ForeignKey("developers.id", ondelete="RESTRICT"), nullable=True)
     avg_rating = Column(Numeric(4, 2), default=0)

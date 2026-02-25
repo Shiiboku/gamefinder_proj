@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session, joinedload
 from typing import Optional
+from sqlalchemy import func
 
 # Импорты моделей
 from models.user import User
@@ -12,7 +13,7 @@ from models.user_game_status import UserGameStatus
 
 # Импорты утилит и схем
 from auth import get_password_hash
-from schemas import GameCreate, GameUpdate
+from schemas import GameCreate, GameUpdate, UserGameStatusCreate
 
 
 # ==========================================
@@ -134,12 +135,71 @@ def delete_game(db: Session, game_id: int):
     return db_game
 
 
-# ==========================================
-# СТАТУСЫ ИГРОКОВ (ИГРАЮ / ПРОШЕЛ / БРОСИЛ)
-# ==========================================
 
 def get_user_game_statuses(db: Session, user_id: int) -> list[UserGameStatus]:
-    # Добавили .all() в конце, чтобы функция возвращала список, а не объект BaseQuery
     return db.query(UserGameStatus).options(
         joinedload(UserGameStatus.game)
     ).filter(UserGameStatus.user_id == user_id).all()
+
+def add_or_update_user_game_status(db: Session, user_id: int, status_data: UserGameStatusCreate):
+    existing_status = db.query(UserGameStatus).filter(
+        UserGameStatus.user_id == user_id,
+        UserGameStatus.game_id == status_data.game_id
+    ).first()
+
+    # === ЛОГИКА ОБНУЛЕНИЯ ===
+    if status_data.status == "none":
+        if existing_status:
+            db.delete(existing_status)
+            db.commit()
+        return None  # Возвращаем пустоту, так как статус удален
+
+    # === ОБЫЧНОЕ СОХРАНЕНИЕ / ОБНОВЛЕНИЕ ===
+    if existing_status:
+        existing_status.status = status_data.status
+        existing_status.score = status_data.score
+        db.commit()
+        db.refresh(existing_status)
+        return existing_status
+    else:
+        new_status = UserGameStatus(
+            user_id=user_id,
+            game_id=status_data.game_id,
+            status=status_data.status,
+            score=status_data.score
+        )
+        db.add(new_status)
+        db.commit()
+        db.refresh(new_status)
+        return new_status
+
+
+def get_user_game_status(db: Session, user_id: int) -> dict:
+    status_count = db.query(
+        UserGameStatus.status,
+        func.count(UserGameStatus.id)
+    ).filter(UserGameStatus.user_id == user_id).group_by(UserGameStatus.status).all()
+
+    rated_count = db.query(func.count(UserGameStatus.id)).filter(
+        UserGameStatus.user_id == user_id,
+        UserGameStatus.score.isnot(None)
+    ).scalar() or 0
+
+    stats = {
+        "planned": 0,
+        "playing": 0,
+        "completed": 0,
+        "dropped": 0,
+        "total_rated": rated_count
+    }
+
+    for status_tuple in status_count:
+        status_name = status_tuple[0]
+        count = status_tuple[1]
+
+        if hasattr(status_name, "value"):
+            status_name = status_name.value
+        if status_name in stats:
+            stats[status_name] += count
+
+    return stats

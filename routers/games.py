@@ -17,9 +17,6 @@ router = APIRouter(prefix="/games", tags=["Games"])
 # ==========================================
 @router.get("/", response_model=List[GameResponse])
 def read_all_games(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """
-    Возвращает список всех игр с поддержкой пагинации (skip, limit).
-    """
     games = crud.get_all_games(db, skip=skip, limit=limit)
     return games
 
@@ -31,9 +28,6 @@ def create_new_game(
     game_in: GameCreate,
     db: Session = Depends(get_db),
 ):
-    """
-    Создает новую игру вручную. Доступно только администраторам.
-    """
     existing_game = crud.get_game_by_title(db, title=game_in.title)
     if existing_game:
         raise HTTPException(

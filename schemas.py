@@ -49,41 +49,52 @@ class GameCreate(BaseModel):
     title: str
     release_date: Optional[date] = None
     is_available: Optional[bool] = True
-    dev_game: Optional[int] = None
     avg_rating: Optional[float] = None
+    price: Optional[float] = None
+    platforms: Optional[str] = None
     cover_url: Optional[str] = None
     hltb_main: Optional[float] = None
     hltb_completionist: Optional[float] = None
     steam_app_id: Optional[int] = None
     igdb_id: Optional[int] = None
+
+    developer_name: Optional[str] = None
+    genres: List[str] = []
+
 
 class GameUpdate(BaseModel):
     title: Optional[str] = None
     release_date: Optional[date] = None
     is_available: Optional[bool] = None
-    dev_game: Optional[int] = None
     avg_rating: Optional[float] = None
+    price: Optional[float] = None
+    platforms: Optional[str] = None
     cover_url: Optional[str] = None
     hltb_main: Optional[float] = None
     hltb_completionist: Optional[float] = None
     steam_app_id: Optional[int] = None
     igdb_id: Optional[int] = None
 
+    developer_name: Optional[str] = None
+    genres: Optional[List[str]] = None
+
+
 class GameResponse(BaseModel):
-    id: Optional[int]
+    id: int
     title: str
     release_date: Optional[datetime] = None
-    dev_game: Optional[int]
-    avg_rating: Optional[float]
-    cover_url: Optional[str]
-    steam_app_id: Optional[int]
+    dev_game: Optional[int] = None
+    price: Optional[float] = None
+    platforms: Optional[str] = None
+    avg_rating: Optional[float] = None
+    cover_url: Optional[str] = None
+    steam_app_id: Optional[int] = None
+    current_online: Optional[int] = None
 
-    # Вложенные связи для красивого JSON
     developer: Optional[DeveloperResponse] = None
     genre_associations: List[GameGenreResponse] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # ==========================================
 # СТАТУСЫ ИГРОКОВ (My Games)

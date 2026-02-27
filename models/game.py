@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Date, Boolean, Numeric, ForeignKey, CheckConstraint, Index, DateTime
+from sqlalchemy import Column, Integer, String, Date, Boolean, Numeric, ForeignKey, CheckConstraint, Index, DateTime, \
+    Float
 from sqlalchemy.orm import relationship
 from db import Base
 
@@ -14,6 +15,9 @@ class Game(Base):
     dev_game = Column(Integer, ForeignKey("developers.id", ondelete="RESTRICT"), nullable=True)
     avg_rating = Column(Numeric(4, 2), default=0)
     cover_url = Column(String(255), nullable=True)
+    current_online = Column(Integer, default=0)
+    price = Column(Float, nullable=True)
+    platforms =Column(String(255), nullable=True)
     hltb_main = Column(Numeric(5, 1), nullable=True)
     hltb_completionist = Column(Numeric(5, 1), nullable=True)
 

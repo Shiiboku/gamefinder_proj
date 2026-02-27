@@ -7,16 +7,15 @@ from dependencies import get_db, get_current_user
 import crud
 import schemas
 
-router = APIRouter(prefix="/users", tags=["Users & Profiles"])
+router = APIRouter(prefix="/GF_tag", tags=["Users & Profiles"])
 
-# 1. Получение профиля
 @router.get("/{username}", response_model=schemas.UserProfileResponse)
 def get_user_profile(username: str, db: Session = Depends(get_db)):
-    user = crud.get_user_by_username(db, username=username)
+    user = crud.user.get_by_username(db, username=username)
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    user_stats = crud.get_user_game_status(db, user_id=user.id)
+    user_stats = crud.user_game_status.get_stats(db, user_id=user.id)
 
     return {
         "id": user.id,
@@ -27,17 +26,15 @@ def get_user_profile(username: str, db: Session = Depends(get_db)):
         "stats": user_stats
     }
 
-# 2. Получение списка игр
 @router.get("/{username}/games", response_model=List[schemas.UserGameStatusResponse])
 def get_user_games(username: str, db: Session = Depends(get_db)):
-    user = crud.get_user_by_username(db, username=username)
+    user = crud.user.get_by_username(db, username=username)
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    statuses = crud.get_user_game_statuses(db, user_id=user.id)
+    statuses = crud.user_game_status.get_user_statuses(db, user_id=user.id)
     return statuses
 
-# 3. Добавление или обновление игры (УБРАЛИ response_model, чтобы можно было возвращать dict при удалении)
 @router.post("/{username}/games")
 def add_or_update_game_in_my_list(
         username: str,
@@ -49,7 +46,7 @@ def add_or_update_game_in_my_list(
         raise HTTPException(status_code=403, detail="Вы не можете редактировать чужой список!")
 
     try:
-        updated_status = crud.add_or_update_user_game_status(
+        updated_status = crud.user_game_status.add_or_update(
             db=db,
             user_id=current_user.id,
             status_data=status_data

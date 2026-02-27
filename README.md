@@ -10,12 +10,12 @@ GameFinder is a scalable, high-performance REST API designed to power a modern v
 ## ✨ Key Features
 
 * **Robust Authentication & Authorization:** Secure user registration, login, and JWT-based session management. Includes Role-Based Access Control (RBAC) with protected admin routes.
-* **Dynamic User Profiles:** Public profile pages accessible via customizable URL routes (e.g., `/users/{username}`), keeping internal IDs secure.
-* **Advanced Game Tracking:** Users can track game statuses (`planned`, `playing`, `completed`, `dropped`) and leave 0-10 scores.
+* **Dynamic User Profiles & Stats:** Public profile pages accessible via customizable URL routes. Features real-time aggregated statistics (games completed, dropped, playing, etc.) while keeping sensitive data (like emails) completely secure.
+* **Advanced Game Tracking:** Users can track game statuses using strict enums (`planned`, `playing`, `completed`, `dropped`) and leave 1-10 scores with dynamically computed reaction stickers.
+* **Automated Release Scheduler:** Integrated `APScheduler` background task that continuously monitors upcoming releases and automatically updates game availability based on exact UTC release datetimes.
+* **Smart Background Import:** Fault-tolerant background workers using FastAPI `BackgroundTasks` for parsing thousands of games from IGDB with automatic pagination, regex-based Steam ID matching, and a global kill-switch.
 * **Rich Game Metadata:** Full support for multilingual descriptions (via PostgreSQL `JSONB`), HowLongToBeat (HLTB) playtime stats, system requirements, cover images, and trailers.
-* **High-Performance DB Architecture:** Optimized PostgreSQL schema utilizing SQLAlchemy 2.0 `joinedload` to eliminate N+1 query problems. 
-* **Data Aggregation Ready:** Designed to work with background parsers fetching data from the IGDB API and Steam.
-* **Smart Background Import: Fault-tolerant background workers using FastAPI BackgroundTasks for parsing thousands of games from IGDB with automatic pagination, regex-based Steam ID matching, and a global kill-switch.
+* **High-Performance DB Architecture:** Optimized PostgreSQL schema utilizing SQLAlchemy 2.0 `joinedload` to eliminate N+1 query problems.
 
 ## 🚀 Roadmap / Upcoming Killer Features
 
@@ -30,7 +30,8 @@ GameFinder is a scalable, high-performance REST API designed to power a modern v
 * **Database:** PostgreSQL
 * **ORM:** SQLAlchemy 2.0 (Declarative Base)
 * **Migrations:** Alembic
-* **Data Validation:** Pydantic v2 (`ConfigDict`, `AliasPath`)
+* **Background Tasks:** APScheduler, FastAPI BackgroundTasks
+* **Data Validation:** Pydantic v2 (`ConfigDict`, `@computed_field`)
 * **Security:** Passlib (Bcrypt), PyJWT
 
 ## ⚙️ Local Setup & Installation
@@ -40,7 +41,12 @@ GameFinder is a scalable, high-performance REST API designed to power a modern v
 git clone [https://github.com/yourusername/gamefinder_core.git](https://github.com/yourusername/gamefinder_core.git)
 cd gamefinder_core
 python -m venv .venv
-source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
+
+# On Windows use: 
+.venv\Scripts\activate
+# On Linux/Mac use: 
+source .venv/bin/activate
+
 pip install -r requirements.txt
 2. Configure Environment Variables:
 Create a .env file in the root directory and add your credentials:
@@ -58,7 +64,7 @@ Initialize your PostgreSQL database with the required tables and constraints:
 Bash
 alembic upgrade head
 4. Run the Application:
-Start the Uvicorn development server:
+Start the Uvicorn development server with APScheduler active:
 
 Bash
 uvicorn main:app --reload
@@ -69,7 +75,7 @@ Open your browser and navigate to http://127.0.0.1:8000/docs to interact with th
 Plaintext
 gamefinder_core/
 ├── alembic/                # Database migration scripts
-├── models/                 # SQLAlchemy ORM models (User, Game, Rating, etc.)
+├── models/                 # SQLAlchemy ORM models (User, Game, UserGameStatus, etc.)
 ├── routers/                # FastAPI endpoint handlers (auth, users, games, admin)
 ├── scripts/                # Utility scripts (e.g., IGDB API parsers)
 ├── alembic.ini             # Alembic configuration
@@ -77,6 +83,7 @@ gamefinder_core/
 ├── crud.py                 # Database operations (Create, Read, Update, Delete)
 ├── db.py                   # DB Engine and Session management
 ├── dependencies.py         # FastAPI Depends() injections (get_db, get_current_user)
-├── main.py                 # FastAPI application instance and router registration
+├── main.py                 # FastAPI app instance and lifespan events
 ├── schemas.py              # Pydantic models for request/response validation
+├── scheduler.py            # APScheduler background tasks logic
 └── README.md

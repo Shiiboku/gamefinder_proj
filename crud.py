@@ -1,48 +1,230 @@
+from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
 from sqlalchemy.orm import Session, joinedload
-from typing import Optional
 from sqlalchemy import func
+from fastapi.encoders import jsonable_encoder
+from pydantic import BaseModel
 
-# Импорты моделей
+from db import Base
 from models.user import User
 from models.game import Game
-from models.game_details import GameDetails  # Добавили новую таблицу деталей
+from models.game_details import GameDetails
 from models.developers import Developer
 from models.genre import Genre
 from models.game_genre import GameGenre
 from models.user_game_status import UserGameStatus
 
-# Импорты утилит и схем
 from auth import get_password_hash
 from schemas import GameCreate, GameUpdate, UserGameStatusCreate
 
+# === БАЗОВЫЕ ТИПЫ ДЛЯ ГЕНЕРИКОВ ===
+ModelType = TypeVar("ModelType", bound=Base)
+CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
+UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
 # ==========================================
-# РАБОТА С ПОЛЬЗОВАТЕЛЯМИ
+# БАЗОВЫЙ КЛАСС CRUD (Умеет всё стандартное)
 # ==========================================
+class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
+    def __init__(self, model: Type[ModelType]):
+        self.model = model
 
-def get_user_by_email(db: Session, email: str) -> Optional[User]:
-    return db.query(User).filter(User.email == email).first()
+    def get(self, db: Session, id: Any) -> Optional[ModelType]:
+        return db.query(self.model).filter(self.model.id == id).first()
 
+    def get_multi(self, db: Session, skip: int = 0, limit: int = 100) -> List[ModelType]:
+        return db.query(self.model).offset(skip).limit(limit).all()
 
-def get_user_by_username(db: Session, username: str) -> Optional[User]:
-    return db.query(User).filter(User.username == username).first()
+    def create(self, db: Session, obj_in: CreateSchemaType) -> ModelType:
+        obj_in_data = jsonable_encoder(obj_in)
+        db_obj = self.model(**obj_in_data)
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
 
-
-def create_user(db: Session, username: str, email: str, password: str, birth=None):
-    pass_hash = get_password_hash(password)
-    db_user = User(username=username, email=email, pass_hash=pass_hash, birth=birth)
-    db.add(db_user)
-    db.commit()  # Используем commit, чтобы юзер сразу сохранился
-    db.refresh(db_user)
-    return db_user
-
+    def remove(self, db: Session, id: int) -> ModelType:
+        obj = db.query(self.model).get(id)
+        if obj:
+            db.delete(obj)
+            db.commit()
+        return obj
 
 # ==========================================
-# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (РАЗРАБОТЧИКИ И ЖАНРЫ)
+# РЕПОЗИТОРИЙ ПОЛЬЗОВАТЕЛЕЙ
 # ==========================================
+class CRUDUser(CRUDBase[User, BaseModel, BaseModel]):
+    def get_by_email(self, db: Session, email: str) -> Optional[User]:
+        return db.query(self.model).filter(User.email == email).first()
+
+    def get_by_username(self, db: Session, username: str) -> Optional[User]:
+        return db.query(self.model).filter(User.username == username).first()
+
+    def create_user(self, db: Session, username: str, email: str, password: str, birth=None) -> User:
+        pass_hash = get_password_hash(password)
+        db_obj = User(username=username, email=email, pass_hash=pass_hash, birth=birth)
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
+
+# ==========================================
+# РЕПОЗИТОРИЙ ИГР
+# ==========================================
+class CRUDGame(CRUDBase[Game, GameCreate, GameUpdate]):
+    def get_by_title(self, db: Session, title: str) -> Optional[Game]:
+        return db.query(self.model).filter(Game.title == title).first()
+
+    def get_multi(
+        self, db: Session, skip: int = 0, limit: int = 100,
+        search: Optional[str] = None,
+
+        genre_name: Optional[str] = None,
+        platform_name: Optional[str] = None,
+        sort_by: str = "release_date",
+        sort_order: str = "desc"
+    ) -> List[Game]:
+        # Базовый запрос
+        query = db.query(self.model).options(
+            joinedload(Game.developer),
+            joinedload(Game.genre_associations).joinedload(GameGenre.genre)
+        )
+
+        # 1. Поиск по названию игры
+        if search:
+            query = query.filter(Game.title.ilike(f"%{search}%"))
+
+
+        # 2. Фильтр по НАЗВАНИЮ жанра (или Steam-тегу)
+        if genre_name:
+            query = query.join(GameGenre)
+            query = query.join(Genre).filter(Genre.name.ilike(f"%{genre_name}%"))
+
+        # 3. Фильтр по Платформе
+        if platform_name:
+            query = query.filter(Game.platforms.ilike(f"%{platform_name}%"))
+
+        # 4. СОРТИРОВКА
+        if sort_by == "rating":
+            order_col = Game.avg_rating
+        elif sort_by == "price":
+            order_col = Game.price
+        elif sort_by == "title":
+            order_col = Game.title
+        elif sort_by == "current_online":
+            order_col = Game.current_online
+        else:
+            order_col = Game.release_date
+
+        # Направление сортировки
+        if sort_order == "asc":
+            query = query.order_by(order_col.asc().nullslast())
+        else:
+            query = query.order_by(order_col.desc().nullslast())
+
+        return query.offset(skip).limit(limit).all()
+
+
+    def create_game_with_details(self, db: Session, game_in: GameCreate) -> Game:
+        # 1. Ищем или создаем разработчика по тексту
+        dev_id = None
+        if game_in.developer_name:
+            dev = find_or_create_developer(db, title=game_in.developer_name)
+            dev_id = dev.id
+
+        # 2. Создаем саму игру
+        db_game = Game(
+            title=game_in.title,
+            release_date=game_in.release_date,
+            is_available=game_in.is_available,
+            dev_game=dev_id,
+            price=game_in.price,
+            platforms=game_in.platforms,
+            avg_rating=game_in.avg_rating,
+            cover_url=game_in.cover_url,
+            hltb_main=game_in.hltb_main,
+            hltb_completionist=game_in.hltb_completionist,
+            steam_app_id=game_in.steam_app_id,
+            igdb_id=game_in.igdb_id
+        )
+        db.add(db_game)
+        db.flush()
+
+        if game_in.genres:
+            for genre_name in game_in.genres:
+                genre = find_or_create_genre(db, name=genre_name)
+                # Создаем связь в промежуточной таблице
+                game_genre_link = GameGenre(game_id=db_game.id, genre_id=genre.id, is_primary=False)
+                db.add(game_genre_link)
+
+        db_details = GameDetails(
+            game_id=db_game.id,
+            description={"en": "", "ru": ""}
+        )
+        db.add(db_details)
+
+        db.commit()
+        db.refresh(db_game)
+        return db_game
+
+# ==========================================
+# РЕПОЗИТОРИЙ СТАТУСОВ (MY GAMES)
+# ==========================================
+class CRUDUserGameStatus(CRUDBase[UserGameStatus, UserGameStatusCreate, BaseModel]):
+    def get_user_statuses(self, db: Session, user_id: int) -> List[UserGameStatus]:
+        return db.query(self.model).options(joinedload(UserGameStatus.game)).filter(UserGameStatus.user_id == user_id).all()
+
+    def add_or_update(self, db: Session, user_id: int, status_data: UserGameStatusCreate) -> Optional[UserGameStatus]:
+        existing = db.query(self.model).filter(
+            UserGameStatus.user_id == user_id,
+            UserGameStatus.game_id == status_data.game_id
+        ).first()
+
+        if status_data.status == "none":
+            if existing:
+                db.delete(existing)
+                db.commit()
+            return None
+
+        if existing:
+            existing.status = status_data.status
+            existing.score = status_data.score
+            db.commit()
+            db.refresh(existing)
+            return existing
+        else:
+            new_status = UserGameStatus(
+                user_id=user_id,
+                game_id=status_data.game_id,
+                status=status_data.status,
+                score=status_data.score
+            )
+            db.add(new_status)
+            db.commit()
+            db.refresh(new_status)
+            return new_status
+
+    def get_stats(self, db: Session, user_id: int) -> dict:
+        status_count = db.query(self.model.status, func.count(self.model.id))\
+            .filter(self.model.user_id == user_id).group_by(self.model.status).all()
+
+        rated_count = db.query(func.count(self.model.id))\
+            .filter(self.model.user_id == user_id, self.model.score.isnot(None)).scalar() or 0
+
+        stats = {"planned": 0, "playing": 0, "completed": 0, "dropped": 0, "total_rated": rated_count}
+        for st_name, count in status_count:
+            name = st_name.value if hasattr(st_name, "value") else st_name
+            if name in stats:
+                stats[name] += count
+        return stats
+
+# ==========================================
+# ИНИЦИАЛИЗАЦИЯ ЭКЗЕМПЛЯРОВ (ЭКСПОРТ)
+# ==========================================
+user = CRUDUser(User)
+game = CRUDGame(Game)
+user_game_status = CRUDUserGameStatus(UserGameStatus)
 
 def find_or_create_developer(db: Session, title: str) -> Developer:
-    # Убрали country="Unknown", так как мы удалили эту колонку из БД
     dev = db.query(Developer).filter(Developer.title == title).first()
     if not dev:
         dev = Developer(title=title)
@@ -50,156 +232,10 @@ def find_or_create_developer(db: Session, title: str) -> Developer:
         db.flush()
     return dev
 
-
 def find_or_create_genre(db: Session, name: str) -> Genre:
-    # Исправили опечатку типа: было -> Game, стало -> Genre
     genre = db.query(Genre).filter(Genre.name == name).first()
     if not genre:
         genre = Genre(name=name)
         db.add(genre)
         db.flush()
     return genre
-
-
-# ==========================================
-# CRUD ДЛЯ ИГР (С УЧЕТОМ НОВОЙ АРХИТЕКТУРЫ)
-# ==========================================
-
-def get_game(db: Session, game_id: int):
-    return db.query(Game).filter(Game.id == game_id).first()
-
-
-def get_game_by_title(db: Session, title: str) -> Optional[Game]:
-    return db.query(Game).filter(Game.title == title).first()
-
-
-def get_all_games(db: Session, skip: int = 0, limit: int = 100):
-    # Оставили твой крутой joinedload для оптимизации SQL-запросов!
-    return db.query(Game).options(
-        joinedload(Game.developer),
-        joinedload(Game.genre_associations).joinedload(GameGenre.genre)
-    ).offset(skip).limit(limit).all()
-
-
-def create_game(db: Session, game: GameCreate):
-    """Создает игру и связанную с ней пустую запись GameDetails"""
-    db_game = Game(
-        title=game.title,
-        release_date=game.release_date,
-        is_available=game.is_available,
-        dev_game=game.dev_game,
-        avg_rating=game.avg_rating,
-        cover_url=game.cover_url,
-        hltb_main=game.hltb_main,
-        hltb_completionist=game.hltb_completionist,
-        steam_app_id=game.steam_app_id,
-        igdb_id=game.igdb_id
-    )
-    db.add(db_game)
-    db.flush()
-
-    # Создаем детали для связи One-to-One
-    db_details = GameDetails(
-        game_id=db_game.id,
-        description={"en": "", "ru": ""},
-        sys_req_min=None,
-        sys_req_rec=None,
-        trailer_url=None
-    )
-    db.add(db_details)
-
-    db.commit()
-    db.refresh(db_game)
-    return db_game
-
-
-def update_game(db: Session, game_id: int, game: GameUpdate):
-    db_game = db.query(Game).filter(Game.id == game_id).first()
-    if db_game:
-        # exclude_unset=True означает, что мы обновляем только те поля, которые реально передали
-        update_data = game.dict(exclude_unset=True)
-        for key, value in update_data.items():
-            setattr(db_game, key, value)
-        db.commit()
-        db.refresh(db_game)
-    return db_game
-
-
-def delete_game(db: Session, game_id: int):
-    db_game = db.query(Game).filter(Game.id == game_id).first()
-    if db_game:
-        # Сначала удаляем зависимые детали, потом саму игру
-        db.query(GameDetails).filter(GameDetails.game_id == game_id).delete()
-        db.delete(db_game)
-        db.commit()
-    return db_game
-
-
-
-def get_user_game_statuses(db: Session, user_id: int) -> list[UserGameStatus]:
-    return db.query(UserGameStatus).options(
-        joinedload(UserGameStatus.game)
-    ).filter(UserGameStatus.user_id == user_id).all()
-
-def add_or_update_user_game_status(db: Session, user_id: int, status_data: UserGameStatusCreate):
-    existing_status = db.query(UserGameStatus).filter(
-        UserGameStatus.user_id == user_id,
-        UserGameStatus.game_id == status_data.game_id
-    ).first()
-
-    # === ЛОГИКА ОБНУЛЕНИЯ ===
-    if status_data.status == "none":
-        if existing_status:
-            db.delete(existing_status)
-            db.commit()
-        return None  # Возвращаем пустоту, так как статус удален
-
-    # === ОБЫЧНОЕ СОХРАНЕНИЕ / ОБНОВЛЕНИЕ ===
-    if existing_status:
-        existing_status.status = status_data.status
-        existing_status.score = status_data.score
-        db.commit()
-        db.refresh(existing_status)
-        return existing_status
-    else:
-        new_status = UserGameStatus(
-            user_id=user_id,
-            game_id=status_data.game_id,
-            status=status_data.status,
-            score=status_data.score
-        )
-        db.add(new_status)
-        db.commit()
-        db.refresh(new_status)
-        return new_status
-
-
-def get_user_game_status(db: Session, user_id: int) -> dict:
-    status_count = db.query(
-        UserGameStatus.status,
-        func.count(UserGameStatus.id)
-    ).filter(UserGameStatus.user_id == user_id).group_by(UserGameStatus.status).all()
-
-    rated_count = db.query(func.count(UserGameStatus.id)).filter(
-        UserGameStatus.user_id == user_id,
-        UserGameStatus.score.isnot(None)
-    ).scalar() or 0
-
-    stats = {
-        "planned": 0,
-        "playing": 0,
-        "completed": 0,
-        "dropped": 0,
-        "total_rated": rated_count
-    }
-
-    for status_tuple in status_count:
-        status_name = status_tuple[0]
-        count = status_tuple[1]
-
-        if hasattr(status_name, "value"):
-            status_name = status_name.value
-        if status_name in stats:
-            stats[status_name] += count
-
-    return stats

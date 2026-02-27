@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from models.user import User
 from dependencies import get_current_admin_user, get_db
 from db import database
+import crud
 import logging
 from scripts.import_service import GameIntegrationService
 from scripts.igdb_parser import get_igdb_token, fetch_top_games, fetch_upcoming_games
@@ -13,13 +14,15 @@ router = APIRouter(prefix="/admin", tags=["admin-panel"])
 IS_PARSER_RUNNING = False
 STOP_PARSER_FLAG = False
 
+
 @router.patch("/promote/{user_id}")
 def promote_user(
         user_id: int,
         db: Session = Depends(get_db),
         current_admin: User = Depends(get_current_admin_user)
 ):
-    user_to_promote = db.query(User).filter(User.id == user_id).first()
+    user_to_promote = crud.user.get(db, id=user_id)
+
     if not user_to_promote:
         raise HTTPException(status_code=404, detail="User not found")
 

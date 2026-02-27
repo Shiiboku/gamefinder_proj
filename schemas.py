@@ -150,4 +150,12 @@ class UserProfileResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+# ==========================================
+# ВИТРИНА (SHOWCASE)
+# ==========================================
+class ShowcaseResponse(BaseModel):
+    trending: List[GameResponse]
+    new_releases: List[GameResponse]
+    upcoming: List[GameResponse]
+
 

@@ -21,7 +21,11 @@ def register_user(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
         email=user_data.email,
         password=user_data.password
     )
-    return {"status": "success", "user_id": new_user.id}
+    return {
+        "status": "success",
+        "message": "Пользователь успешно зарегистрирован",
+        "data": {"user_id": new_user.id}
+    }
 
 @router.post("/login")
 def login_for_access_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):

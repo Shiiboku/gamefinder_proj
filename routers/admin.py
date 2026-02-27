@@ -1,12 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
+import scripts.scheduler as my_scheduler
+from crud import find_or_create_genre
 from models.user import User
 from dependencies import get_current_admin_user, get_db
 from db import database
 import crud
+import time
 import logging
 from scripts.import_service import GameIntegrationService
 from scripts.igdb_parser import get_igdb_token, fetch_top_games, fetch_upcoming_games
+from scripts.steam_parser import fetch_steam_tags
+
+from models.game_genre import GameGenre
+from models.game import Game
 
 logger = logging.getLogger("game_import")
 router = APIRouter(prefix="/admin", tags=["admin-panel"])
@@ -136,3 +143,61 @@ def stop_import_games(current_admin=Depends(get_current_admin_user)):
 
     STOP_PARSER_FLAG = True
     return {"status": "success", "message": "Команда на остановку отправлена! Парсер завершит текущую пачку игр и выключится."}
+
+
+def run_sync_steam_tags():
+    logger.info("Начат сбор тегов Steam...")
+    with database.get_session() as db:
+        steam_games = db.query(Game).filter(Game.steam_app_id.isnot(None)).all()
+
+        for game in steam_games:
+            tags = fetch_steam_tags(game.steam_app_id)
+            if tags:
+                existing_tags = db.query(GameGenre.genre_id).filter(GameGenre.game_id == game.id).all()
+                existing_genres_ids = {link [0] for link in existing_tags}
+
+                for tag in tags:
+                    genre_obj = find_or_create_genre(db, name=tag)
+                    if genre_obj.id not in existing_genres_ids:
+                        new_link = GameGenre(game_id=game.id, genre_id=genre_obj.id, is_primary=False)
+                        db.add(new_link)
+                        existing_genres_ids.add(genre_obj.id)
+            db.commit()
+            time.sleep(1.5)
+
+    logger.info("Сбор тегов завершен!")
+
+@router.post("/sync-steam-tags")
+
+def sync_steam_tags(
+        background_tasks: BackgroundTasks,
+        current_admin=Depends(get_current_admin_user),
+):
+    background_tasks.add_task(run_sync_steam_tags)
+    return {"status": "success", "message": "Процесс сбора тегов запущен в фоне!"}
+
+
+@router.post("/force-update-pulse")
+def force_update_game_pulse(
+        background_tasks: BackgroundTasks,
+        current_admin=Depends(get_current_admin_user)
+):
+    """Принудительно запускает обновление онлайна и цен вне расписания."""
+
+    # Обращаемся напрямую к переменной в файле scheduler
+    if my_scheduler.IS_PULSE_RUNNING:
+        return {"status": "error", "message": "Процесс обновления Game Pulse УЖЕ запущен!"}
+
+    background_tasks.add_task(my_scheduler.update_game_pulse_and_prices)
+    return {"status": "success", "message": "Принудительное обновление Game Pulse запущено в фоне."}
+
+
+@router.post("/stop-pulse")
+def stop_game_pulse(current_admin=Depends(get_current_admin_user)):
+    """Экстренно останавливает парсинг онлайна и цен."""
+
+    if not my_scheduler.IS_PULSE_RUNNING:
+        return {"status": "info", "message": "Обновление Game Pulse и так сейчас не работает."}
+
+    my_scheduler.STOP_PULSE_FLAG = True
+    return {"status": "success", "message": "Команда на остановку Game Pulse отправлена!"}

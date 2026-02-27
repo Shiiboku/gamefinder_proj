@@ -156,9 +156,3 @@ class GameIntegrationService:
             raise e
 
 
-
-        except Exception as e:
-            self.db.rollback()
-            logging.error(f"ОШИБКА: Не удалось импортировать '{game_title}': {str(e)}")
-            raise e
-
